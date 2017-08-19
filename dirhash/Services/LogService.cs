@@ -15,11 +15,12 @@ namespace dirhash.Services
 
         public void Add(string message)
         {
-            Insert(new LogEntity()
+            base.Insert(new LogEntity()
             {
                 CreatedAt = DateTime.Now,
                 Message = message
             });
+            
         }
     }
 }

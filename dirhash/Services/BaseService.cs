@@ -56,14 +56,29 @@ namespace dirhash.Services
             return this._repository.Insert(entity);
         }
 
+        public virtual void Insert(IEnumerable<TEntity> entities)
+        {
+            this._repository.Insert(entities);
+        }
+
         public virtual void Update(TEntity entity)
         {
             this._repository.Update(entity);
         }
 
+        public virtual void Update(IEnumerable<TEntity> entities)
+        {
+            this._repository.Update(entities);
+        }
+
         public virtual void Delete(TEntity entity)
         {
             this._repository.Delete(entity);
+        }
+
+        public virtual void Delete(IEnumerable<TEntity> entities)
+        {
+            this._repository.Delete(entities);
         }
 
         public virtual void Delete(int id)
