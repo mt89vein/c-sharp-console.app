@@ -10,6 +10,7 @@ namespace dirhash.Services
 {
     public interface IFileService : IBaseService<FileEntity>
     {
-        void Insert(KeyValuePair<string, string> file);
+        bool Insert(KeyValuePair<string, string> file);
+        bool Insert(List<FileEntity> files);
     }
 }

@@ -5,27 +5,57 @@ using System.Security.Cryptography;
 using System.Threading;
 using dirhash.Services;
 using Autofac;
+using dirhash.Models;
 
 namespace dirhash
 {
-    /// <summary>
-    /// Основной поток
-    /// </summary>
     class Program
     {
-        public delegate void FilesStateHandler(int current, int all);
-        public static event FilesStateHandler Added;
+        #region [properties]
+        #region [События]
+        /// <summary>
+        /// Делегат для вывода текущего статуса выполнения
+        /// </summary>
+        /// <param name="current"></param>
+        /// <param name="hashed"></param>
+        /// <param name="all"></param>
+        private delegate void FilesStateHandler(int current, int hashed, int all);
+        /// <summary>
+        /// Событие возникает при добавлении в очереди или запись в бд
+        /// </summary>
+        private static event FilesStateHandler Added;
 
-        private static Queue<KeyValuePair<string, string>> _filesHashQueue = new Queue<KeyValuePair<string, string>>();
-        private static Queue<FileInfo> _filesInfoQueue = new Queue<FileInfo>();
-        public static int SavedCount = 0;
-        public static int AllFilesCount = 0;
+        #endregion [События]
+
+        #region [Очереди]
+
+        private static readonly Queue<KeyValuePair<string, string>> FilesHashQueue = new Queue<KeyValuePair<string, string>>();
+        private static readonly Queue<FileInfo> FilesInfoQueue = new Queue<FileInfo>();
+
+        #endregion [Очереди]
+
+        #region [Счётчики]
+
+        public static int SavedCount { get; set; }
+        public static int HashedCount { get; set; }
+        public static int AllFilesCount { get; set; }
+
+        #endregion [Счётчики]
+
+        #region [DirectoryWalkerProperties]
+
+        private static string RootPath { get; set; }
+        private static bool IsExistPath { get; set; }
+
+        #endregion [DirectoryWalkerProperties]
+
+        #region [DiContainer]
 
         private static ILogService _logService;
-        private static IContainer _container;
+        private static Autofac.IContainer _container;
         private static IFileService _fileService;
 
-        public static ILogService LogService
+        private static ILogService LogService
         {
             get
             {
@@ -35,7 +65,7 @@ namespace dirhash
             }
         }
 
-        public static IFileService FileService
+        private static IFileService FileService
         {
             get
             {
@@ -45,7 +75,7 @@ namespace dirhash
             }
         }
 
-        public static IContainer Container
+        private static Autofac.IContainer Container
         {
             get
             {
@@ -54,85 +84,153 @@ namespace dirhash
                 return _container;
             }
         }
+        
+        #endregion [DiContainer]
+
+        #endregion [properties]
+
+        #region [Workers]
 
         /// <summary>
-        /// Использует сервис для записи в базу данных лог сообщения
+        /// Смотрит появились ли записи в хэш очереди и записывает их в бд пачками до 30 шт
         /// </summary>
-        /// <param name="message"></param>
-        public static void SaveToLog(string message)
-        {
-            LogService.Add(message);
-        }
-
-        public static void SaveFileEntity(KeyValuePair<string, string> file)
-        {
-            FileService.Insert(file);
-            SavedCount++;
-        }
-        /// <summary>
-        /// Смотрит появились ли записи в хэш очереди и закидывает их в бд
-        /// </summary>
-        public static void DbWorker()
+        private static void DbWorker()
         {
             while (true)
             {
-                if (_filesHashQueue.Count <= 0)
-                    continue;
-
-                try
-                {
-                    KeyValuePair<string, string> file;
-                    lock (_filesHashQueue)
+                if (FilesHashQueue.Count == 0)
+                    Thread.Sleep(1);
+                else
+                    try
                     {
-                        file = _filesHashQueue.Dequeue();
+                        List<FileEntity> toInsertEntities = new List<FileEntity>();
+                        lock (FilesHashQueue)
+                        {
+                            //вставляем пачками по 30 шт или сколько там набралось, бережём бд :)
+                            for (int i = 0; i <= Math.Min(29, FilesHashQueue.Count); i++)
+                            {
+                                KeyValuePair<string, string> file = FilesHashQueue.Dequeue();
+
+                                if (file.Value != string.Empty)
+                                {
+                                    toInsertEntities.Add(new FileEntity()
+                                    {
+                                        CreatedAt = DateTime.Now,
+                                        Filename = file.Key,
+                                        Hash = file.Value
+                                    });
+                                }
+                            }
+                        }
+                        if (FileService.Insert(toInsertEntities))
+                        {
+                            SavedCount += toInsertEntities.Count;
+                            Added?.Invoke(SavedCount, 0, 0);
+                        }
                     }
-                    SaveFileEntity(file);
-                }
-                catch (Exception e)
-                {
-                    SaveToLog(e.Message);
-                }
+                    catch (Exception e)
+                    {
+                        LogService.Add(e.Message);
+                    }
             }
         }
 
         /// <summary>
         /// Смотрит появились ли записи в очереди файлов на вычисление хэш суммы, вычисляет и ставит в очередь на запись в бд
         /// </summary>
-        public static void HashWorker()
+        private static void HashWorker()
         {
             while (true)
             {
-                if (_filesInfoQueue.Count <= 0)
-                    continue;
-
-                try
-                {
-                    lock (_filesInfoQueue)
+                if (FilesInfoQueue.Count == 0)
+                    Thread.Sleep(1);
+                else
+                    try
                     {
-                        FileInfo file = _filesInfoQueue.Dequeue();
+                        FileInfo file;
+                        lock (FilesInfoQueue)
+                        {
+                            file = FilesInfoQueue.Dequeue();
+                        }
 
                         string hash = GetFileHash(file.FullName);
                         if (hash != string.Empty)
                         {
-                            lock (_filesHashQueue)
+                            lock (FilesHashQueue)
                             {
-                                _filesHashQueue.Enqueue(new KeyValuePair<string, string>(file.Name, file.FullName));
+                                FilesHashQueue.Enqueue(new KeyValuePair<string, string>(file.Name, hash));
                             }
+                            Added?.Invoke(0, ++HashedCount, 0);
                         }
                     }
+                    catch (Exception e)
+                    {
+                        LogService.Add(e.Message);
+                    }
+            }
+
+        }
+
+        #region [DirectoryWalker]
+
+        private static void SelectPath()
+        {
+            do
+            {
+                Console.Write("Введите путь: ");
+
+                RootPath = Console.ReadLine();
+                IsExistPath = Directory.Exists(RootPath);
+
+                Console.WriteLine(!IsExistPath ? "Путь не найден." : $"Выбрана директория: {RootPath}");
+
+            } while (!IsExistPath);
+        }
+
+        static void Walker()
+        {
+            Walk(RootPath);
+        }
+
+        static void Walk(string path)
+        {
+            DirectoryInfo root = new DirectoryInfo(path);
+            FileInfo[] files = null;
+
+            try
+            {
+                files = root.GetFiles("*.*");
+            }
+            catch (Exception e)
+            {
+                LogService.Add(e.Message);
+            }
+
+
+            if (files != null)
+
+                foreach (FileInfo file in files)
+                {
+                    lock (FilesInfoQueue)
+                    {
+                        FilesInfoQueue.Enqueue(file);
+                    }
+                    Added?.Invoke(0, 0, ++AllFilesCount);
 
                 }
-                catch (Exception e)
-                {
-                    SaveToLog(e.Message);
-                }
+
+            var subDirs = root.GetDirectories();
+
+            foreach (DirectoryInfo dirInfo in subDirs)
+            {
+                Walk(dirInfo.FullName);
             }
         }
 
-        public static void StatusVerboser(int current, int all)
-        {
-            Console.WriteLine($" Обработано: { current } из { all }");
-        }
+        #endregion
+        #endregion [Workers]
+
+        #region [Heplers]
 
         private static string GetFileHash(string filename)
         {
@@ -149,28 +247,41 @@ namespace dirhash
             }
             catch (Exception e)
             {
-                SaveToLog(e.Message);
+                LogService.Add(e.Message);
             }
             return result;
         }
 
+        private static void StatusVerboser(int current = 0, int hashed = 0, int all = 0)
+        {
+
+            if (current == 0)
+                current = SavedCount;
+
+            if (hashed == 0)
+                hashed = HashedCount;
+
+            if (all == 0)
+                all = AllFilesCount;
+            Console.WriteLine($"left: {hashed - current,3} |  | hashed: {hashed,3} | all: {all,3}| done: {current,3}");
+        }
+
+        #endregion [Heplers]
+
         public static void Main(string[] args)
         {
-            DirectoryWalker directoryWalker = new DirectoryWalker();
-            directoryWalker.SelectPath();
+            SelectPath();
+            //при любых действиях выводим сообщение о статус
             Added += StatusVerboser;
-            
-            //ищем файлы и записываем в очередь для хэширования
-            Thread walker = new Thread(() => directoryWalker.Walk(ref _filesInfoQueue, ref AllFilesCount));
-            //"слушатель" для вычисления хэшей файлов в очереди
-            Thread hashWorker = new Thread(HashWorker);
-            //"слушатель" для записи в бд вычисленных хэшей
-            Thread dbWorker = new Thread(DbWorker);
-
+            Thread walker = new Thread(Walker);
             walker.Start();
-            hashWorker.Start();
-            dbWorker.Start();
 
+            Thread hasher = new Thread(HashWorker);
+            hasher.Start();
+
+            Thread dbWriter = new Thread(DbWorker);
+            dbWriter.Start();
+            
             Console.ReadKey();
         }
     }

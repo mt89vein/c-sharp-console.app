@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Entity;
 using System.Data.Entity.Validation;
 using System.Linq;
@@ -37,7 +38,7 @@ namespace dirhash.DAL
         public Repository(IDbContext context)
         {
             this._context = context;
-            
+            this._context.AutoDetectChangesEnabled = false;
         }
 
         /// <summary>
@@ -108,7 +109,7 @@ namespace dirhash.DAL
             }
             catch (DbEntityValidationException dbEx)
             {
-                throw new Exception(GetFullErrorText(dbEx), dbEx);
+               throw new Exception(GetFullErrorText(dbEx), dbEx);
             }
         }
 

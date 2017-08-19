@@ -1,4 +1,7 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Entity.Migrations.Model;
 
 namespace dirhash.Models
 {
@@ -7,6 +10,7 @@ namespace dirhash.Models
         /// <summary>
         /// Идентификатор
         /// </summary>
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
 
         public override bool Equals(object obj)

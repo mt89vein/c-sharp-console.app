@@ -45,10 +45,22 @@ namespace dirhash.Services
         int Insert(TEntity entity);
 
         /// <summary>
+        /// Пакетная вставка
+        /// </summary>
+        /// <param name="entities"></param>
+        void Insert(IEnumerable<TEntity> entities);
+
+        /// <summary>
         /// Обновление записи.
         /// </summary>
         /// <param name="entity"></param>
         void Update(TEntity entity);
+
+        /// <summary>
+        /// Пакетное обновление
+        /// </summary>
+        /// <param name="entities"></param>
+        void Update(IEnumerable<TEntity> entities);
 
         /// <summary>
         /// Удаление по идентификатору.
@@ -61,5 +73,11 @@ namespace dirhash.Services
         /// </summary>
         /// <param name="entity"></param>
         void Delete(TEntity entity);
+
+        /// <summary>
+        /// Пакетное удаление
+        /// </summary>
+        /// <param name="entities"></param>
+        void Delete(IEnumerable<TEntity> entities);
     }
 }
