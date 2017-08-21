@@ -11,7 +11,7 @@ namespace dirhash.Models
         /// Идентификатор
         /// </summary>
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public int Id { get; set; }
+        public int Id { get; private set; }
 
         public override bool Equals(object obj)
         {
@@ -56,14 +56,5 @@ namespace dirhash.Models
             return Id.GetHashCode();
         }
 
-        public static bool operator ==(BaseEntity x, BaseEntity y)
-        {
-            return Equals(x, y);
-        }
-
-        public static bool operator !=(BaseEntity x, BaseEntity y)
-        {
-            return !(x == y);
-        }
     }
 }

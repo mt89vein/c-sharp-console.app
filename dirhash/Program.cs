@@ -9,6 +9,7 @@ using dirhash.Models;
 
 namespace dirhash
 {
+
     class Program
     {
         #region [properties]
@@ -36,18 +37,11 @@ namespace dirhash
 
         #region [Счётчики]
 
-        public static int SavedCount { get; set; }
-        public static int HashedCount { get; set; }
-        public static int AllFilesCount { get; set; }
+        private static Counters savedCount = new Counters();
+        private static Counters hashedCount = new Counters();
+        private static Counters allFilesCount = new Counters();
 
         #endregion [Счётчики]
-
-        #region [DirectoryWalkerProperties]
-
-        private static string RootPath { get; set; }
-        private static bool IsExistPath { get; set; }
-
-        #endregion [DirectoryWalkerProperties]
 
         #region [DiContainer]
 
@@ -103,7 +97,7 @@ namespace dirhash
                 else
                     try
                     {
-                        List<FileEntity> toInsertEntities = new List<FileEntity>();
+                        List<KeyValuePair<string, string>> toInsertFiles = new List<KeyValuePair<string, string>>();
                         lock (FilesHashQueue)
                         {
                             //вставляем пачками по 30 шт или сколько там набралось, бережём бд :)
@@ -112,20 +106,13 @@ namespace dirhash
                                 KeyValuePair<string, string> file = FilesHashQueue.Dequeue();
 
                                 if (file.Value != string.Empty)
-                                {
-                                    toInsertEntities.Add(new FileEntity()
-                                    {
-                                        CreatedAt = DateTime.Now,
-                                        Filename = file.Key,
-                                        Hash = file.Value
-                                    });
-                                }
+                                    toInsertFiles.Add(file);
                             }
                         }
-                        if (FileService.Insert(toInsertEntities))
+                        if (FileService.Insert(toInsertFiles))
                         {
-                            SavedCount += toInsertEntities.Count;
-                            Added?.Invoke(SavedCount, 0, 0);
+                            savedCount.Counter+= toInsertFiles.Count;
+                            Added?.Invoke(savedCount.Counter, 0, 0);
                         }
                     }
                     catch (Exception e)
@@ -160,7 +147,8 @@ namespace dirhash
                             {
                                 FilesHashQueue.Enqueue(new KeyValuePair<string, string>(file.Name, hash));
                             }
-                            Added?.Invoke(0, ++HashedCount, 0);
+                            hashedCount.Counter++;
+                            Added?.Invoke(0, hashedCount.Counter, 0);
                         }
                     }
                     catch (Exception e)
@@ -173,23 +161,28 @@ namespace dirhash
 
         #region [DirectoryWalker]
 
-        private static void SelectPath()
+        private static string SelectPath()
         {
+            bool isExistPath;
+            string rootPath = "";
+
             do
             {
                 Console.Write("Введите путь: ");
 
-                RootPath = Console.ReadLine();
-                IsExistPath = Directory.Exists(RootPath);
+                rootPath = Console.ReadLine();
+                isExistPath = Directory.Exists(rootPath);
 
-                Console.WriteLine(!IsExistPath ? "Путь не найден." : $"Выбрана директория: {RootPath}");
+                Console.WriteLine(!isExistPath ? "Путь не найден." : $"Выбрана директория: {rootPath}");
 
-            } while (!IsExistPath);
+            } while (!isExistPath);
+
+            return rootPath;
         }
 
-        static void Walker()
+        static void Walker(string rootPath)
         {
-            Walk(RootPath);
+            Walk(rootPath);
         }
 
         static void Walk(string path)
@@ -215,7 +208,8 @@ namespace dirhash
                     {
                         FilesInfoQueue.Enqueue(file);
                     }
-                    Added?.Invoke(0, 0, ++AllFilesCount);
+                    allFilesCount.Counter++;
+                    Added?.Invoke(0, 0, allFilesCount.Counter);
 
                 }
 
@@ -256,24 +250,27 @@ namespace dirhash
         {
 
             if (current == 0)
-                current = SavedCount;
+                current = savedCount.Counter;
 
             if (hashed == 0)
-                hashed = HashedCount;
+                hashed = hashedCount.Counter;
 
             if (all == 0)
-                all = AllFilesCount;
-            Console.WriteLine($"left: {hashed - current,3} |  | hashed: {hashed,3} | all: {all,3}| done: {current,3}");
+                all = allFilesCount.Counter;
+
+            Console.WriteLine($"hashed: {hashed,3} | all: {all,3}| done: {current,3}");
         }
 
         #endregion [Heplers]
 
         public static void Main(string[] args)
         {
-            SelectPath();
-            //при любых действиях выводим сообщение о статус
+            //цепляем событие [при любых действиях выводим сообщение о статусe]
             Added += StatusVerboser;
-            Thread walker = new Thread(Walker);
+
+            string path = SelectPath();
+            
+            Thread walker = new Thread(() => { Walker(path); });
             walker.Start();
 
             Thread hasher = new Thread(HashWorker);

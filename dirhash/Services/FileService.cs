@@ -16,25 +16,22 @@ namespace dirhash.Services
             _logService = logService;
         }
 
-        public bool Insert(KeyValuePair<string, string> file)
-        {
-            int id = base.Insert(new FileEntity()
-            {
-                Filename = file.Key,
-                Hash = file.Value,
-                CreatedAt = DateTime.Now
-            });
-
-            //возвращает true если вставка удалась
-            return id > 0;
-        }
-
-        public bool Insert(List<FileEntity> files)
+        public bool Insert(List<KeyValuePair<string, string>> files)
         {
             bool status = true;
             try
             {
-                base.Insert(files);
+                List<FileEntity> filesEntities = new List<FileEntity>();
+                foreach (KeyValuePair<string, string> file in files)
+                {
+                    filesEntities.Add(new FileEntity()
+                    {
+                        Filename = file.Key,
+                        Hash = file.Value,
+                        CreatedAt = DateTime.Now
+                    });
+                }
+                base.Insert(filesEntities);
             }
             catch (Exception e)
             {
