@@ -10,10 +10,10 @@ namespace dirhash
         public IContainer Build()
         {
             var builder = new ContainerBuilder();
-            builder.Register<IDbContext>(c => new ApplicationDbContext()).InstancePerLifetimeScope();
-            builder.RegisterGeneric(typeof(Repository<>)).As(typeof(IRepository<>)).InstancePerLifetimeScope();
-            builder.RegisterType<LogService>().As<ILogService>().InstancePerLifetimeScope();
-            builder.RegisterType<FileService>().As<IFileService>().InstancePerLifetimeScope();
+            builder.Register<IDbContext>(c => new ApplicationDbContext()).InstancePerDependency();
+            builder.RegisterGeneric(typeof(Repository<>)).As(typeof(IRepository<>)).InstancePerDependency();
+            builder.RegisterType<LogService>().As<ILogService>().InstancePerDependency();
+            builder.RegisterType<FileService>().As<IFileService>().InstancePerDependency();
             return builder.Build();
         }
 

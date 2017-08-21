@@ -44,41 +44,12 @@ namespace dirhash
         #endregion [Счётчики]
 
         #region [DiContainer]
+    
+        private static Autofac.IContainer Container { get; } = new IoCConfig().Build();
 
-        private static ILogService _logService;
-        private static Autofac.IContainer _container;
-        private static IFileService _fileService;
+        private static ILogService LogService { get; } = Container.Resolve<ILogService>();
 
-        private static ILogService LogService
-        {
-            get
-            {
-                if (_logService == null)
-                    return _logService = Container.Resolve<ILogService>();
-                return _logService;
-            }
-        }
-
-        private static IFileService FileService
-        {
-            get
-            {
-                if (_fileService == null)
-                    return _fileService = Container.Resolve<IFileService>();
-                return _fileService;
-            }
-        }
-
-        private static Autofac.IContainer Container
-        {
-            get
-            {
-                if (_container == null)
-                    return _container = new IoCConfig().Build();
-                return _container;
-            }
-        }
-        
+        private static IFileService FileService { get; } = Container.Resolve<IFileService>();
         #endregion [DiContainer]
 
         #endregion [properties]
@@ -164,7 +135,7 @@ namespace dirhash
         private static string SelectPath()
         {
             bool isExistPath;
-            string rootPath = "";
+            string rootPath;
 
             do
             {
@@ -178,6 +149,20 @@ namespace dirhash
             } while (!isExistPath);
 
             return rootPath;
+        }
+
+        private static int SelectThreadCount()
+        {
+            int hashThreadsCount = 0;
+            do
+            {
+                Console.WriteLine("Введите количество потоков для вычисления хэша");
+
+                if (!int.TryParse(Console.ReadLine(), out hashThreadsCount)) continue;
+
+            } while (hashThreadsCount <= 0);
+
+            return hashThreadsCount;
         }
 
         static void Walker(string rootPath)
@@ -235,7 +220,7 @@ namespace dirhash
                 {
                     using (FileStream stream = File.OpenRead(filename))
                     {
-                        result = Convert.ToBase64String(md5.ComputeHash(inputStream: stream));
+                        result = Convert.ToBase64String(md5.ComputeHash(stream));
                     }
                 }
             }
@@ -263,19 +248,25 @@ namespace dirhash
 
         #endregion [Heplers]
 
+
+
         public static void Main(string[] args)
         {
             //цепляем событие [при любых действиях выводим сообщение о статусe]
             Added += StatusVerboser;
 
             string path = SelectPath();
-            
+            int threadCount = SelectThreadCount();
+
             Thread walker = new Thread(() => { Walker(path); });
             walker.Start();
 
-            Thread hasher = new Thread(HashWorker);
-            hasher.Start();
-
+            for (int i = 1; i <= threadCount; i++)
+            {
+                Thread hasher = new Thread(HashWorker) {Name = "Поток " + i.ToString()};
+                hasher.Start();
+            }
+           
             Thread dbWriter = new Thread(DbWorker);
             dbWriter.Start();
             
